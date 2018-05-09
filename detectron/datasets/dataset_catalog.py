@@ -185,5 +185,29 @@ DATASETS = {
             _DATA_DIR + '/VOC2012/annotations/voc_2012_trainval.json',
         DEVKIT_DIR:
             _DATA_DIR + '/VOC2012/VOCdevkit2012'
+    },
+    'ava_mini_train': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/train/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_train_100subset.json',
+    },
+    'ava_mini_val': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/val/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_val_100subset.json'
+    },
+    'ava_mini_train_multilabel': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/train/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_train_100subset_multilabel.json',
+    },
+    'ava_mini_val_multilabel': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/val/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_val_100subset_multilabel.json'
     }
 }

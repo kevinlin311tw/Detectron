@@ -36,6 +36,7 @@ import detectron.utils.boxes as box_utils
 
 logger = logging.getLogger(__name__)
 
+label_code = None
 
 def get_fast_rcnn_blob_names(is_training=True):
     """Fast R-CNN blob names."""
@@ -102,14 +103,24 @@ def get_fast_rcnn_blob_names(is_training=True):
                 for lvl in range(k_min, k_max + 1):
                     blob_names += ['keypoint_rois_fpn' + str(lvl)]
                 blob_names += ['keypoint_rois_idx_restore_int32']
+    global label_code
+    if label_code==None:
+        f = open('/data/dataset/AVA/preproc/annotations/ava_label_codes.json','r')
+        label_code = json.load(f)
+
     return blob_names
 
 
 def add_fast_rcnn_blobs(blobs, im_scales, roidb):
     """Add blobs needed for training Fast R-CNN style models."""
+    global label_code
+    if label_code==None:
+        f = open('/data/dataset/AVA/preproc/annotations/ava_label_codes.json','r')
+        label_code = json.load(f)
+
     # Sample training RoIs from each image and append them to the blob lists
     for im_i, entry in enumerate(roidb):
-        frcn_blobs = _sample_rois(entry, im_scales[im_i], im_i)
+        frcn_blobs = _sample_rois(entry, im_scales[im_i], im_i, label_code)
         for k, v in frcn_blobs.items():
             blobs[k].append(v)
     # Concat the training blob lists into tensors
@@ -129,7 +140,7 @@ def add_fast_rcnn_blobs(blobs, im_scales, roidb):
     return valid
 
 
-def _sample_rois(roidb, im_scale, batch_idx):
+def _sample_rois(roidb, im_scale, batch_idx, label_code):
     """Generate a random sample of RoIs comprising foreground and background
     examples.
     """
@@ -192,7 +203,30 @@ def _sample_rois(roidb, im_scale, batch_idx):
     repeated_batch_idx = batch_idx * blob_utils.ones((sampled_rois.shape[0], 1))
     sampled_rois = np.hstack((repeated_batch_idx, sampled_rois))
 
+    expand_sampled_labels = np.expand_dims(sampled_labels,axis=2)
+    expand_sampled_labels = np.repeat(expand_sampled_labels,81,axis=1)
+
+    for idx in range(0,len(sampled_labels)):
+        label_int = sampled_labels[idx]
+        if label_int != 0:
+            multi_label_str = label_code['idx_to_label'][str(label_int)]
+            multi_label = map(int, list(multi_label_str))
+            expand_sampled_labels[idx] = multi_label
+        else:
+            expand_sampled_labels[idx] = [0]*81
+
     # Base Fast R-CNN blobs
+    blob_dict = dict(
+        # labels_int32=sampled_labels.astype(np.int32, copy=False),
+        labels_int32=expand_sampled_labels.astype(np.int32, copy=False),
+        rois=sampled_rois,
+        bbox_targets=bbox_targets,
+        bbox_inside_weights=bbox_inside_weights,
+        bbox_outside_weights=bbox_outside_weights
+    )
+
+    # Base Fast R-CNN blobs
+    '''
     blob_dict = dict(
         labels_int32=sampled_labels.astype(np.int32, copy=False),
         rois=sampled_rois,
@@ -200,7 +234,7 @@ def _sample_rois(roidb, im_scale, batch_idx):
         bbox_inside_weights=bbox_inside_weights,
         bbox_outside_weights=bbox_outside_weights
     )
-
+    '''
     # Optionally add Mask R-CNN blobs
     if cfg.MODEL.MASK_ON:
         mask_rcnn_roi_data.add_mask_rcnn_blobs(

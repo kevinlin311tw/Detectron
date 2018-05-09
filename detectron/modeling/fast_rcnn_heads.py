@@ -87,6 +87,46 @@ def add_fast_rcnn_losses(model):
     model.AddMetrics('accuracy_cls')
     return loss_gradients
 
+def add_fast_rcnn_multilabel_outputs(model, blob_in, dim):
+    """Add RoI classification and bounding box regression output ops."""
+    model.FC(
+        blob_in,
+        'cls_score',
+        dim,
+        81,
+        weight_init=gauss_fill(0.01),
+        bias_init=const_fill(0.0)
+    )
+
+    model.FC(
+        blob_in,
+        'bbox_pred',
+        dim,
+        model.num_classes * 4,
+        weight_init=gauss_fill(0.001),
+        bias_init=const_fill(0.0)
+    )
+
+
+def add_fast_rcnn_multilabel_losses(model):
+
+    """Add losses for RoI classification and bounding box regression."""
+    loss_dist = model.net.SigmoidCrossEntropyLoss(
+        ['cls_score', 'labels_int32'], ['loss_dist'],
+        scale=model.GetLossScale()
+    )
+    loss_bbox = model.net.SmoothL1Loss(
+        [
+            'bbox_pred', 'bbox_targets', 'bbox_inside_weights',
+            'bbox_outside_weights'
+        ],
+        'loss_bbox',
+        scale=model.GetLossScale()
+    )
+    loss_gradients = blob_utils.get_loss_gradients(model, [loss_dist, loss_bbox])
+    model.AddLosses(['loss_dist', 'loss_bbox'])
+    return loss_gradients
+
 
 # ---------------------------------------------------------------------------- #
 # Box heads
