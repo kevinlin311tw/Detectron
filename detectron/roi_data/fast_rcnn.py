@@ -27,6 +27,7 @@ import logging
 import numpy as np
 import numpy.random as npr
 import json
+import code
 
 from detectron.core.config import cfg
 import detectron.modeling.FPN as fpn
@@ -49,6 +50,7 @@ def get_fast_rcnn_blob_names(is_training=True):
         # labels_int32 blob: R categorical labels in [0, ..., K] for K
         # foreground classes plus background
         blob_names += ['labels_int32']
+        blob_names += ['multilabels_int32']
     if is_training:
         # bbox_targets blob: R bounding-box regression targets with 4
         # targets per class
@@ -148,7 +150,7 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
     rois_per_image = int(cfg.TRAIN.BATCH_SIZE_PER_IM)
     fg_rois_per_image = int(np.round(cfg.TRAIN.FG_FRACTION * rois_per_image))
     max_overlaps = roidb['max_overlaps']
-
+    
     # Select foreground RoIs as those with >= FG_THRESH overlap
     fg_inds = np.where(max_overlaps >= cfg.TRAIN.FG_THRESH)[0]
     # Guard against the case when an image has fewer than fg_rois_per_image
@@ -181,6 +183,7 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
     sampled_labels = roidb['max_classes'][keep_inds]
     sampled_labels[fg_rois_per_this_image:] = 0  # Label bg RoIs with class 0
     sampled_boxes = roidb['boxes'][keep_inds]
+    # code.interact(local=locals())
 
     if 'bbox_targets' not in roidb:
         gt_inds = np.where(roidb['gt_classes'] > 0)[0]
@@ -190,6 +193,7 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
             sampled_boxes, gt_boxes[gt_assignments, :], sampled_labels
         )
         bbox_targets, bbox_inside_weights = _expand_bbox_targets(bbox_targets)
+        # code.interact(local=locals())
     else:
         bbox_targets, bbox_inside_weights = _expand_bbox_targets(
             roidb['bbox_targets'][keep_inds, :]
@@ -204,6 +208,32 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
     repeated_batch_idx = batch_idx * blob_utils.ones((sampled_rois.shape[0], 1))
     sampled_rois = np.hstack((repeated_batch_idx, sampled_rois))
 
+    expand_sampled_labels = np.expand_dims(sampled_labels,axis=2)
+    expand_sampled_labels = np.repeat(expand_sampled_labels,81,axis=1)
+
+    for idx in range(0,len(sampled_labels)):
+        label_int = sampled_labels[idx]
+        if label_int != 0:
+            sampled_labels[idx] = 1
+            multi_label_str = label_code['idx_to_label'][str(label_int)]
+            multi_label = map(int, list(multi_label_str))
+            expand_sampled_labels[idx] = multi_label
+        else:
+            sampled_labels[idx] = 0
+            expand_sampled_labels[idx] = [0]*81
+
+    # Base Fast R-CNN blobs
+    blob_dict = dict(
+        labels_int32=sampled_labels.astype(np.int32, copy=False),
+        multilabels_int32=expand_sampled_labels.astype(np.int32, copy=False),
+        rois=sampled_rois,
+        bbox_targets=bbox_targets,
+        bbox_inside_weights=bbox_inside_weights,
+        bbox_outside_weights=bbox_outside_weights
+    )
+
+
+    '''
     expand_sampled_labels = np.expand_dims(sampled_labels,axis=2)
     expand_sampled_labels = np.repeat(expand_sampled_labels,81,axis=1)
 
@@ -225,7 +255,7 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
         bbox_inside_weights=bbox_inside_weights,
         bbox_outside_weights=bbox_outside_weights
     )
-
+    '''
     # Base Fast R-CNN blobs
     '''
     blob_dict = dict(
@@ -286,8 +316,14 @@ def _expand_bbox_targets(bbox_target_data):
     bbox_targets = blob_utils.zeros((clss.size, 4 * num_bbox_reg_classes))
     bbox_inside_weights = blob_utils.zeros(bbox_targets.shape)
     inds = np.where(clss > 0)[0]
+
     for ind in inds:
         cls = int(clss[ind])
+        if cls>1:
+            cls=1
+        else:
+            cls=0
+
         start = 4 * cls
         end = start + 4
         bbox_targets[ind, start:end] = bbox_target_data[ind, 1:]

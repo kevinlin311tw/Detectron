@@ -35,16 +35,18 @@ import time
 
 from caffe2.python import workspace
 
-from core.config import assert_and_infer_cfg
-from core.config import cfg
-from core.config import merge_cfg_from_file
-from utils.io import cache_url
-from utils.timer import Timer
-import core.test_engine as infer_engine
-import datasets.dummy_datasets as dummy_datasets
-import utils.c2 as c2_utils
-import utils.logging
-import utils.vis as vis_utils
+from detectron.core.config import assert_and_infer_cfg
+from detectron.core.config import cfg
+from detectron.core.config import merge_cfg_from_file
+from detectron.utils.io import cache_url
+from detectron.utils.logging import setup_logging
+from detectron.utils.timer import Timer
+import detectron.core.test_engine as infer_engine
+import detectron.datasets.dummy_datasets as dummy_datasets
+import detectron.utils.c2 as c2_utils
+import detectron.utils.logging
+import detectron.utils.vis as vis_utils
+
 
 c2_utils.import_detectron_ops()
 # OpenCL may be enabled by default in OpenCV3; disable it because it's not
@@ -99,6 +101,7 @@ def main(args):
     assert_and_infer_cfg()
     model = infer_engine.initialize_model_from_cfg(args.weights)
     dummy_coco_dataset = dummy_datasets.get_ava_dataset()
+    dummy_ava_action_label = dummy_datasets.get_ava_dataset_action()
 
     if os.path.isdir(args.im_or_folder):
         im_list = glob.iglob(args.im_or_folder + '/*.' + args.image_ext)
@@ -126,7 +129,7 @@ def main(args):
                 'rest (caches and auto-tuning need to warm up)'
             )
 
-        vis_utils.vis_one_image(
+        vis_utils.my_action_vis_one_image(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             args.output_dir,
@@ -134,6 +137,7 @@ def main(args):
             cls_segms,
             cls_keyps,
             dataset=dummy_coco_dataset,
+            action_label=dummy_ava_action_label,
             box_alpha=0.3,
             show_class=True,
             thresh=0.0,
@@ -143,6 +147,6 @@ def main(args):
 
 if __name__ == '__main__':
     workspace.GlobalInit(['caffe2', '--caffe2_log_level=0'])
-    utils.logging.setup_logging(__name__)
+    setup_logging(__name__)
     args = parse_args()
     main(args)

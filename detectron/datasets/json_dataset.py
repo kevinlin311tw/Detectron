@@ -24,7 +24,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-
+import code
 import copy
 import cPickle as pickle
 import logging
@@ -82,6 +82,7 @@ class JsonDataset(object):
             v: k
             for k, v in self.json_category_id_to_contiguous_id.items()
         }
+        code.interact(local=locals())
         self._init_keypoints()
 
     def get_roidb(
@@ -244,6 +245,7 @@ class JsonDataset(object):
         entry['box_to_gt_ind_map'] = np.append(
             entry['box_to_gt_ind_map'], box_to_gt_ind_map
         )
+        # code.interact(local=locals())
         if self.keypoints is not None:
             entry['gt_keypoints'] = np.append(
                 entry['gt_keypoints'], gt_keypoints, axis=0
@@ -440,6 +442,7 @@ def _add_class_assignments(roidb):
         max_overlaps = gt_overlaps.max(axis=1)
         # gt class that had the max overlap
         max_classes = gt_overlaps.argmax(axis=1)
+
         entry['max_classes'] = max_classes
         entry['max_overlaps'] = max_overlaps
         # sanity checks

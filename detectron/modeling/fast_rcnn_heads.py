@@ -93,22 +93,82 @@ def add_fast_rcnn_multilabel_outputs(model, blob_in, dim):
         blob_in,
         'cls_score',
         dim,
-        81,
+        2,
         weight_init=gauss_fill(0.01),
         bias_init=const_fill(0.0)
     )
 
     model.FC(
         blob_in,
+        'action_score_fc',
+        dim,
+        81,
+        weight_init=gauss_fill(0.01),
+        bias_init=const_fill(0.0)
+    )
+    model.Sigmoid('action_score_fc','action_score')
+
+    if not model.train:  # == if test
+        # Only add softmax when testing; during training the softmax is combined
+        # with the label cross entropy loss for numerical stability
+        model.Softmax('cls_score', 'cls_prob', engine='CUDNN')
+    model.FC(
+        blob_in,
         'bbox_pred',
         dim,
-        model.num_classes * 4,
+        2 * 4,
         weight_init=gauss_fill(0.001),
         bias_init=const_fill(0.0)
     )
 
 
 def add_fast_rcnn_multilabel_losses(model):
+    """Add losses for RoI classification and bounding box regression."""
+    cls_prob, loss_cls = model.net.SoftmaxWithLoss(
+        ['cls_score', 'labels_int32'], ['cls_prob', 'loss_cls'],
+        scale=model.GetLossScale()
+    )
+    loss_dist = model.net.SigmoidCrossEntropyLoss(
+        ['action_score', 'multilabels_int32'], ['loss_dist'],
+        scale=model.GetLossScale()
+    )
+    loss_bbox = model.net.SmoothL1Loss(
+        [
+            'bbox_pred', 'bbox_targets', 'bbox_inside_weights',
+            'bbox_outside_weights'
+        ],
+        'loss_bbox',
+        scale=model.GetLossScale()
+    )
+    loss_gradients = blob_utils.get_loss_gradients(model, [loss_dist, loss_cls, loss_bbox])
+    model.Accuracy(['cls_prob', 'labels_int32'], 'accuracy_cls')
+    model.AddLosses(['loss_dist', 'loss_cls', 'loss_bbox'])
+    model.AddMetrics('accuracy_cls')
+    return loss_gradients
+
+def add_fast_rcnn_multilabel_outputs_old(model, blob_in, dim):
+    """Add RoI classification and bounding box regression output ops."""
+    model.FC(
+        blob_in,
+        'cls_score_fc',
+        dim,
+        81,
+        weight_init=gauss_fill(0.01),
+        bias_init=const_fill(0.0)
+    )
+    model.Sigmoid('cls_score_fc','cls_score')
+
+    model.FC(
+        blob_in,
+        'bbox_pred',
+        dim,
+        2 * 4,
+        weight_init=gauss_fill(0.001),
+        bias_init=const_fill(0.0)
+    )
+
+
+def add_fast_rcnn_multilabel_losses_old(model):
 
     """Add losses for RoI classification and bounding box regression."""
     loss_dist = model.net.SigmoidCrossEntropyLoss(

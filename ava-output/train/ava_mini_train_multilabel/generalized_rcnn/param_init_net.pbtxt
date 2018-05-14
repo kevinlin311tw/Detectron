@@ -3088,7 +3088,7 @@ op {
   }
   arg {
     name: "shape"
-    ints: 81
+    ints: 2
     ints: 1024
   }
   device_option {
@@ -3098,6 +3098,41 @@ op {
 }
 op {
   output: "gpu_0/cls_score_b"
+  name: ""
+  type: "ConstantFill"
+  arg {
+    name: "shape"
+    ints: 2
+  }
+  arg {
+    name: "value"
+    f: 0.0
+  }
+  device_option {
+    device_type: 1
+    cuda_gpu_id: 0
+  }
+}
+op {
+  output: "gpu_0/action_score_fc_w"
+  name: ""
+  type: "GaussianFill"
+  arg {
+    name: "std"
+    f: 0.00999999977648
+  }
+  arg {
+    name: "shape"
+    ints: 81
+    ints: 1024
+  }
+  device_option {
+    device_type: 1
+    cuda_gpu_id: 0
+  }
+}
+op {
+  output: "gpu_0/action_score_fc_b"
   name: ""
   type: "ConstantFill"
   arg {
@@ -3123,7 +3158,7 @@ op {
   }
   arg {
     name: "shape"
-    ints: 17868
+    ints: 8
     ints: 1024
   }
   device_option {
@@ -3137,7 +3172,7 @@ op {
   type: "ConstantFill"
   arg {
     name: "shape"
-    ints: 17868
+    ints: 8
   }
   arg {
     name: "value"
@@ -4185,6 +4220,34 @@ op {
 op {
   input: "gpu_0/cls_score_b"
   output: "gpu_0/cls_score_b_momentum"
+  name: ""
+  type: "ConstantFill"
+  arg {
+    name: "value"
+    f: 0.0
+  }
+  device_option {
+    device_type: 1
+    cuda_gpu_id: 0
+  }
+}
+op {
+  input: "gpu_0/action_score_fc_w"
+  output: "gpu_0/action_score_fc_w_momentum"
+  name: ""
+  type: "ConstantFill"
+  arg {
+    name: "value"
+    f: 0.0
+  }
+  device_option {
+    device_type: 1
+    cuda_gpu_id: 0
+  }
+}
+op {
+  input: "gpu_0/action_score_fc_b"
+  output: "gpu_0/action_score_fc_b_momentum"
   name: ""
   type: "ConstantFill"
   arg {

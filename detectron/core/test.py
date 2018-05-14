@@ -27,6 +27,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+import code
 
 from collections import defaultdict
 import cv2
@@ -62,7 +63,10 @@ def im_detect_all(model, im, box_proposals, timers=None):
     if cfg.TEST.BBOX_AUG.ENABLED:
         scores, boxes, im_scale = im_detect_bbox_aug(model, im, box_proposals)
     else:
-        scores, boxes, im_scale = im_detect_bbox(
+        # scores, boxes, im_scale = im_detect_bbox(
+        #     model, im, cfg.TEST.SCALE, cfg.TEST.MAX_SIZE, boxes=box_proposals
+        # )
+        scores, boxes, action_scores, im_scale = im_detect_bbox_action(
             model, im, cfg.TEST.SCALE, cfg.TEST.MAX_SIZE, boxes=box_proposals
         )
     timers['im_detect_bbox'].toc()
@@ -72,7 +76,8 @@ def im_detect_all(model, im, box_proposals, timers=None):
     # cls_boxes boxes and scores are separated by class and in the format used
     # for evaluating results
     timers['misc_bbox'].tic()
-    scores, boxes, cls_boxes = box_results_with_nms_and_limit(scores, boxes)
+    # scores, boxes, cls_boxes = box_results_with_nms_and_limit(scores, boxes)
+    scores, boxes, action_scores, cls_boxes = box_action_results_with_nms_and_limit(scores, action_scores, boxes)
     timers['misc_bbox'].toc()
 
     if cfg.MODEL.MASK_ON and boxes.shape[0] > 0:
@@ -162,7 +167,7 @@ def im_detect_bbox(model, im, target_scale, target_max_size, boxes=None):
         rois = workspace.FetchBlob(core.ScopedName('rois'))
         # unscale back to raw image space
         boxes = rois[:, 1:5] / im_scale
-
+    
     # Softmax class probabilities
     scores = workspace.FetchBlob(core.ScopedName('cls_prob')).squeeze()
     # In case there is 1 proposal
@@ -192,6 +197,88 @@ def im_detect_bbox(model, im, target_scale, target_max_size, boxes=None):
         pred_boxes = pred_boxes[inv_index, :]
 
     return scores, pred_boxes, im_scale
+
+def im_detect_bbox_action(model, im, target_scale, target_max_size, boxes=None):
+    """Bounding box object detection for an image with given box proposals.
+
+    Arguments:
+        model (DetectionModelHelper): the detection model to use
+        im (ndarray): color image to test (in BGR order)
+        boxes (ndarray): R x 4 array of object proposals in 0-indexed
+            [x1, y1, x2, y2] format, or None if using RPN
+
+    Returns:
+        scores (ndarray): R x K array of object class scores for K classes
+            (K includes background as object category 0)
+        boxes (ndarray): R x 4*K array of predicted bounding boxes
+        im_scales (list): list of image scales used in the input blob (as
+            returned by _get_blobs and for use with im_detect_mask, etc.)
+    """
+    inputs, im_scale = _get_blobs(im, boxes, target_scale, target_max_size)
+
+    # When mapping from image ROIs to feature map ROIs, there's some aliasing
+    # (some distinct image ROIs get mapped to the same feature ROI).
+    # Here, we identify duplicate feature ROIs, so we only compute features
+    # on the unique subset.
+    if cfg.DEDUP_BOXES > 0 and not cfg.MODEL.FASTER_RCNN:
+        v = np.array([1, 1e3, 1e6, 1e9, 1e12])
+        hashes = np.round(inputs['rois'] * cfg.DEDUP_BOXES).dot(v)
+        _, index, inv_index = np.unique(
+            hashes, return_index=True, return_inverse=True
+        )
+        inputs['rois'] = inputs['rois'][index, :]
+        boxes = boxes[index, :]
+
+    # Add multi-level rois for FPN
+    if cfg.FPN.MULTILEVEL_ROIS and not cfg.MODEL.FASTER_RCNN:
+        _add_multilevel_rois_for_test(inputs, 'rois')
+
+    for k, v in inputs.items():
+        workspace.FeedBlob(core.ScopedName(k), v)
+    workspace.RunNet(model.net.Proto().name)
+
+    # Read out blobs
+    if cfg.MODEL.FASTER_RCNN:
+        rois = workspace.FetchBlob(core.ScopedName('rois'))
+        # unscale back to raw image space
+        boxes = rois[:, 1:5] / im_scale
+    
+    # Softmax class probabilities
+    scores = workspace.FetchBlob(core.ScopedName('cls_prob')).squeeze()
+    # In case there is 1 proposal
+    scores = scores.reshape([-1, scores.shape[-1]])
+    
+
+    # for multilabel output
+    action_scores = workspace.FetchBlob(core.ScopedName('action_score')).squeeze()
+    # In case there is 1 proposal
+    action_scores = action_scores.reshape([-1, action_scores.shape[-1]])
+
+    if cfg.TEST.BBOX_REG:
+        # Apply bounding-box regression deltas
+        box_deltas = workspace.FetchBlob(core.ScopedName('bbox_pred')).squeeze()
+        # In case there is 1 proposal
+        box_deltas = box_deltas.reshape([-1, box_deltas.shape[-1]])
+        if cfg.MODEL.CLS_AGNOSTIC_BBOX_REG:
+            # Remove predictions for bg class (compat with MSRA code)
+            box_deltas = box_deltas[:, -4:]
+        pred_boxes = box_utils.bbox_transform(
+            boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS
+        )
+        pred_boxes = box_utils.clip_tiled_boxes(pred_boxes, im.shape)
+        if cfg.MODEL.CLS_AGNOSTIC_BBOX_REG:
+            pred_boxes = np.tile(pred_boxes, (1, scores.shape[1]))
+    else:
+        # Simply repeat the boxes, once for each class
+        pred_boxes = np.tile(boxes, (1, scores.shape[1]))
+
+    if cfg.DEDUP_BOXES > 0 and not cfg.MODEL.FASTER_RCNN:
+        # Map scores and predictions back to the original set of boxes
+        scores = scores[inv_index, :]
+        pred_boxes = pred_boxes[inv_index, :]
+        action_scores = action_scores[inv_index, :]
+
+    return scores, pred_boxes, action_scores, im_scale
 
 
 def im_detect_bbox_aug(model, im, box_proposals=None):
@@ -760,7 +847,7 @@ def box_results_with_nms_and_limit(scores, boxes):
     dataset (including the background class). `scores[i, j]`` corresponds to the
     box at `boxes[i, j * 4:(j + 1) * 4]`.
     """
-    num_classes = cfg.MODEL.NUM_CLASSES
+    num_classes = 2#cfg.MODEL.NUM_CLASSES
     cls_boxes = [[] for _ in range(num_classes)]
     # Apply threshold on detection probabilities and apply NMS
     # Skip j = 0, because it's the background class
@@ -807,6 +894,71 @@ def box_results_with_nms_and_limit(scores, boxes):
     boxes = im_results[:, :-1]
     scores = im_results[:, -1]
     return scores, boxes, cls_boxes
+
+def box_action_results_with_nms_and_limit(scores, action_scores, boxes):
+    """Returns bounding-box detection results by thresholding on scores and
+    applying non-maximum suppression (NMS).
+
+    `boxes` has shape (#detections, 4 * #classes), where each row represents
+    a list of predicted bounding boxes for each of the object classes in the
+    dataset (including the background class). The detections in each row
+    originate from the same object proposal.
+
+    `scores` has shape (#detection, #classes), where each row represents a list
+    of object detection confidence scores for each of the object classes in the
+    dataset (including the background class). `scores[i, j]`` corresponds to the
+    box at `boxes[i, j * 4:(j + 1) * 4]`.
+    """
+    num_classes = 2#cfg.MODEL.NUM_CLASSES
+    cls_boxes = [[] for _ in range(num_classes)]
+    # Apply threshold on detection probabilities and apply NMS
+    # Skip j = 0, because it's the background class
+    for j in range(1, num_classes):
+        inds = np.where(scores[:, j] > cfg.TEST.SCORE_THRESH)[0]
+        scores_j = scores[inds, j]
+        action_scores_j = action_scores[inds, :]
+        boxes_j = boxes[inds, j * 4:(j + 1) * 4]
+        dets_j = np.hstack((boxes_j, scores_j[:, np.newaxis], action_scores_j)).astype(
+            np.float32, copy=False
+        )
+
+        if cfg.TEST.SOFT_NMS.ENABLED:
+            nms_dets, _ = box_utils.soft_nms(
+                dets_j,
+                sigma=cfg.TEST.SOFT_NMS.SIGMA,
+                overlap_thresh=cfg.TEST.NMS,
+                score_thresh=0.0001,
+                method=cfg.TEST.SOFT_NMS.METHOD
+            )
+        else:
+            keep = box_utils.nms(dets_j, cfg.TEST.NMS)
+            nms_dets = dets_j[keep, :]
+        # Refine the post-NMS boxes using bounding-box voting
+        if cfg.TEST.BBOX_VOTE.ENABLED:
+            nms_dets = box_utils.box_voting(
+                nms_dets,
+                dets_j,
+                cfg.TEST.BBOX_VOTE.VOTE_TH,
+                scoring_method=cfg.TEST.BBOX_VOTE.SCORING_METHOD
+            )
+        cls_boxes[j] = nms_dets
+
+    # Limit to max_per_image detections **over all classes**
+    if cfg.TEST.DETECTIONS_PER_IM > 0:
+        image_scores = np.hstack(
+            [cls_boxes[j][:, 4] for j in range(1, num_classes)]
+        )
+        if len(image_scores) > cfg.TEST.DETECTIONS_PER_IM:
+            image_thresh = np.sort(image_scores)[-cfg.TEST.DETECTIONS_PER_IM]
+            for j in range(1, num_classes):
+                keep = np.where(cls_boxes[j][:, 4] >= image_thresh)[0]
+                cls_boxes[j] = cls_boxes[j][keep, :]
+
+    im_results = np.vstack([cls_boxes[j] for j in range(1, num_classes)])
+    boxes = im_results[:, 0:4]
+    scores = im_results[:, 4]
+    action_scores = im_results[:, 5:]
+    return scores, boxes, action_scores, cls_boxes
 
 
 def segm_results(cls_boxes, masks, ref_boxes, im_h, im_w):

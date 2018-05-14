@@ -265,6 +265,7 @@ def _add_fast_rcnn_head(
         loss_gradients = fast_rcnn_heads.add_fast_rcnn_multilabel_losses(model)
     else:
         loss_gradients = None
+
     return loss_gradients
 
 

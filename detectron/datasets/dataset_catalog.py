@@ -209,5 +209,29 @@ DATASETS = {
             _DATA_DIR + '/ava_data/val/keyframes',
         ANN_FN:
             _DATA_DIR + '/ava_data/annotations/ava_val_100subset_multilabel.json'
+    },
+    'ava_mini_train_multilabel_new': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/train/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_train_100subset_multilabel_new.json',
+    },
+    'ava_mini_val_multilabel_new': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/val/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_val_100subset_multilabel_new.json'
+    },
+    'ava_train_multilabel_full': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/train/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_train_multilabel.json',
+    },
+    'ava_val_multilabel_full': {
+        IM_DIR:
+            _DATA_DIR + '/ava_data/val/keyframes',
+        ANN_FN:
+            _DATA_DIR + '/ava_data/annotations/ava_val_multilabel.json'
     }
 }

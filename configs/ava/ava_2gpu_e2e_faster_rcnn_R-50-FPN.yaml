@@ -10,10 +10,8 @@ SOLVER:
   LR_POLICY: steps_with_decay
   BASE_LR: 0.0025
   GAMMA: 0.1
-  MAX_ITER: 5000
-  STEPS: [0, 3000, 4000]
-  # MAX_ITER: 50000
-  # STEPS: [0, 30000, 40000]
+  MAX_ITER: 60000
+  STEPS: [0, 30000, 40000]
   # Equivalent schedules with...
   # 1 GPU:
   #   BASE_LR: 0.0025
@@ -42,7 +40,7 @@ FAST_RCNN:
   ROI_XFORM_SAMPLING_RATIO: 2
 TRAIN:
   WEIGHTS: https://s3-us-west-2.amazonaws.com/detectron/ImageNetPretrained/MSRA/R-50.pkl
-  DATASETS: ('ava_mini_train_multilabel',)
+  DATASETS: ('ava_train_multilabel_full',)
   SCALES: (500,)
   MAX_SIZE: 833
   BATCH_SIZE_PER_IM: 256
