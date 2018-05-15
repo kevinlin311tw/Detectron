@@ -82,7 +82,7 @@ class JsonDataset(object):
             v: k
             for k, v in self.json_category_id_to_contiguous_id.items()
         }
-        code.interact(local=locals())
+        # code.interact(local=locals())
         self._init_keypoints()
 
     def get_roidb(
@@ -214,7 +214,9 @@ class JsonDataset(object):
 
         im_has_visible_keypoints = False
         for ix, obj in enumerate(valid_objs):
-            cls = self.json_category_id_to_contiguous_id[obj['category_id']]
+            # code.interact(local=locals())
+            # cls = self.json_category_id_to_contiguous_id[obj['category_id']]
+            cls = obj['category_id']
             boxes[ix, :] = obj['clean_bbox']
             gt_classes[ix] = cls
             seg_areas[ix] = obj['area']

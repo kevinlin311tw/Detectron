@@ -250,7 +250,7 @@ def im_detect_bbox_action(model, im, target_scale, target_max_size, boxes=None):
     
 
     # for multilabel output
-    action_scores = workspace.FetchBlob(core.ScopedName('action_score')).squeeze()
+    action_scores = workspace.FetchBlob(core.ScopedName('action_prob')).squeeze()
     # In case there is 1 proposal
     action_scores = action_scores.reshape([-1, action_scores.shape[-1]])
 

@@ -100,18 +100,19 @@ def add_fast_rcnn_multilabel_outputs(model, blob_in, dim):
 
     model.FC(
         blob_in,
-        'action_score_fc',
+        'action_cls_logits',
         dim,
         81,
         weight_init=gauss_fill(0.01),
         bias_init=const_fill(0.0)
     )
-    model.Sigmoid('action_score_fc','action_score')
 
     if not model.train:  # == if test
         # Only add softmax when testing; during training the softmax is combined
         # with the label cross entropy loss for numerical stability
+        model.Sigmoid('action_cls_logits','action_prob')
         model.Softmax('cls_score', 'cls_prob', engine='CUDNN')
+        
     model.FC(
         blob_in,
         'bbox_pred',
@@ -129,7 +130,7 @@ def add_fast_rcnn_multilabel_losses(model):
         scale=model.GetLossScale()
     )
     loss_dist = model.net.SigmoidCrossEntropyLoss(
-        ['action_score', 'multilabels_int32'], ['loss_dist'],
+        ['action_cls_logits', 'multilabels_int32'], ['loss_dist'],
         scale=model.GetLossScale()
     )
     loss_bbox = model.net.SmoothL1Loss(
