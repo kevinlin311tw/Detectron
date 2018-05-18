@@ -105,9 +105,6 @@ def main(args):
     dummy_coco_dataset = dummy_datasets.get_ava_dataset()
     dummy_ava_action_label = dummy_datasets.get_ava_dataset_action()
 
-    OUTPUT_TEST_CSV = args.output_dir+'/ours_results.csv'
-    new_boxes = []
-
     if os.path.isdir(args.im_or_folder):
         im_list = glob.iglob(args.im_or_folder + '/*.' + args.image_ext)
     else:
@@ -134,7 +131,7 @@ def main(args):
                 'rest (caches and auto-tuning need to warm up)'
             )
 
-        vis_utils.my_action_vis_one_image(
+        vis_utils.my_action_vis_one_image_single(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             args.output_dir,

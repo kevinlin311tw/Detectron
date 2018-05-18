@@ -452,10 +452,172 @@ def my_action_vis_one_image(
                         facecolor='r', alpha=0.4, pad=0, edgecolor='none'),
                     color='white')
 
-    output_name = os.path.basename(im_name) + '.' + ext
+    # output_name = os.path.basename(im_name) + '.' + ext
+    output_name = im_name.split('/')[-2]+'_'+im_name.split('/')[-1]+'.'+ext
     fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
     plt.close('all')
 
+def my_action_vis_one_image_single(
+        im, im_name, output_dir, boxes, segms=None, keypoints=None, thresh=0.9,
+        kp_thresh=2, dpi=200, box_alpha=0.0, dataset=None, action_label=None, show_class=False,
+        ext='pdf'):
+    """Visual debugging of detections."""
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    if isinstance(boxes, list):
+        boxes, segms, keypoints, classes = convert_from_cls_format(
+            boxes, segms, keypoints)
+
+    if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
+        return
+
+    fig = plt.figure(frameon=False)
+    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.axis('off')
+    fig.add_axes(ax)
+
+    # Display in largest to smallest order to reduce occlusion
+    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    sorted_inds = np.argsort(-areas)
+
+    mask_color_id = 0
+    for i in sorted_inds:
+        bbox = boxes[i, :4]
+        score = boxes[i, 4]
+        action_scores = boxes[i, 5:]
+        sort_idx = np.argsort(action_scores)
+        if score < thresh:
+            continue
+
+        # show box (off by default)
+        ax.add_patch(
+            plt.Rectangle((bbox[0], bbox[1]),
+                          bbox[2] - bbox[0],
+                          bbox[3] - bbox[1],
+                          fill=False, edgecolor='g',
+                          linewidth=0.5, alpha=box_alpha))
+
+        if show_class:
+            ax.text(
+                bbox[0], bbox[1] - 2,
+                get_class_string(classes[i], score, dataset),
+                fontsize=3,
+                family='serif',
+                bbox=dict(
+                    facecolor='g', alpha=0.4, pad=0, edgecolor='none'),
+                color='white')
+
+            for action_rank in range(0,1):
+                index = (action_rank+1)*(-1)
+                ax.text(
+                    bbox[0], bbox[1] + 10*(action_rank+1),
+                    get_class_string(sort_idx[index], action_scores[sort_idx[index]], action_label), 
+                    fontsize=3,
+                    family='serif',
+                    bbox=dict(
+                        facecolor='r', alpha=0.4, pad=0, edgecolor='none'),
+                    color='white')
+
+    # output_name = os.path.basename(im_name) + '.' + ext
+    output_name = im_name.split('/')[-2]+'_'+im_name.split('/')[-1]+'.'+ext
+    fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
+    plt.close('all')    
+
+def my_action_vis_one_image_csv_single(
+        im, im_name, output_dir, boxes, new_boxes, segms=None, keypoints=None, thresh=0.9,
+        kp_thresh=2, dpi=200, box_alpha=0.0, dataset=None, action_label=None, show_class=False,
+        ext='pdf'):
+    """Visual debugging of detections."""
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    if isinstance(boxes, list):
+        boxes, segms, keypoints, classes = convert_from_cls_format(
+            boxes, segms, keypoints)
+
+    if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
+        return new_boxes
+
+    fig = plt.figure(frameon=False)
+    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.axis('off')
+    fig.add_axes(ax)
+
+    img_height = im.shape[0]
+    img_width = im.shape[1]
+    # Display in largest to smallest order to reduce occlusion
+    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    sorted_inds = np.argsort(-areas)
+
+    mask_color_id = 0
+    for i in sorted_inds:
+        bbox = boxes[i, :4]
+        score = boxes[i, 4]
+        action_scores = boxes[i, 5:]
+        sort_idx = np.argsort(action_scores)
+        if score >= thresh:
+            if action_scores[sort_idx[-1]] > 0.1:
+                temp = [im_name.split('/')[-2], im_name.split('/')[-1].split('.')[0], \
+                bbox[0]/img_width, bbox[1]/img_height, bbox[2]/img_width, bbox[3]/img_height, \
+                sort_idx[-1], action_scores[sort_idx[-1]]]
+                temp = np.array(temp,dtype=object)
+                if len(temp)>0:
+                    new_boxes.append(temp)    
+         
+    return new_boxes
+
+def my_action_vis_one_image_csv(
+        im, im_name, output_dir, boxes, new_boxes, segms=None, keypoints=None, thresh=0.9,
+        kp_thresh=2, dpi=200, box_alpha=0.0, dataset=None, action_label=None, show_class=False,
+        ext='pdf'):
+    """Visual debugging of detections."""
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    if isinstance(boxes, list):
+        boxes, segms, keypoints, classes = convert_from_cls_format(
+            boxes, segms, keypoints)
+
+    if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
+        return
+
+    fig = plt.figure(frameon=False)
+    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.axis('off')
+    fig.add_axes(ax)
+    ax.imshow(im)
+
+    img_height = im.shape[0]
+    img_width = im.shape[1]
+    # Display in largest to smallest order to reduce occlusion
+    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    sorted_inds = np.argsort(-areas)
+
+    mask_color_id = 0
+    for i in sorted_inds:
+        bbox = boxes[i, :4]
+        score = boxes[i, 4]
+        action_scores = boxes[i, 5:]
+        if score >= thresh:
+            for j in range(0,len(action_scores)):
+                if action_scores[j] > 0.1:
+                    temp = [im_name.split('/')[-2], im_name.split('/')[-1].split('.')[0], \
+                    bbox[0]/img_width, bbox[1]/img_height, bbox[2]/img_width, bbox[3]/img_height, \
+                    j, action_scores[j]]
+                    temp = np.array(temp,dtype=object)
+                    if new_boxes is None:
+                        new_boxes = []
+                        new_boxes.append(temp)
+                    else:
+                        new_boxes.append(temp)
+                    
+    return new_boxes
 
 def my_vis_one_image(
         im, im_name, output_dir, boxes, segms=None, keypoints=None, thresh=0.0,

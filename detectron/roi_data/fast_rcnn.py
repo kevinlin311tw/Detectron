@@ -182,6 +182,8 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
     # Label is the class each RoI has max overlap with
     sampled_labels = roidb['max_classes'][keep_inds]
     sampled_labels[fg_rois_per_this_image:] = 0  # Label bg RoIs with class 0
+    action_sampled_labels = roidb['max_classes'][keep_inds]
+    action_sampled_labels[fg_rois_per_this_image:] = 0  # Label bg RoIs with class 0
     sampled_boxes = roidb['boxes'][keep_inds]
     # code.interact(local=locals())
 
@@ -207,7 +209,34 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
     sampled_rois = sampled_boxes * im_scale
     repeated_batch_idx = batch_idx * blob_utils.ones((sampled_rois.shape[0], 1))
     sampled_rois = np.hstack((repeated_batch_idx, sampled_rois))
+    
+    # new version for hierachy training
+    for idx in range(0,len(sampled_labels)):
+        label_int = sampled_labels[idx]
+        if label_int != 0:
+            sampled_labels[idx] = 1
+            action_sampled_labels[idx] = 0
+            multi_label_str = label_code['idx_to_label'][str(label_int)]
+            multi_label = map(int, list(multi_label_str))
+            for k in range(0,14):
+                if int(multi_label[k+1])==1:
+                    action_sampled_labels[idx] = k+1
+        else:
+            sampled_labels[idx] = 0
+            action_sampled_labels[idx] = 0
 
+    # Base Fast R-CNN blobs
+    blob_dict = dict(
+        labels_int32=sampled_labels.astype(np.int32, copy=False),
+        multilabels_int32=action_sampled_labels.astype(np.int32, copy=False),
+        rois=sampled_rois,
+        bbox_targets=bbox_targets,
+        bbox_inside_weights=bbox_inside_weights,
+        bbox_outside_weights=bbox_outside_weights
+    )
+    
+    # previous version for multilabel training
+    '''
     expand_sampled_labels = np.expand_dims(sampled_labels,axis=2)
     expand_sampled_labels = np.repeat(expand_sampled_labels,81,axis=1)
 
@@ -231,31 +260,8 @@ def _sample_rois(roidb, im_scale, batch_idx, label_code):
         bbox_inside_weights=bbox_inside_weights,
         bbox_outside_weights=bbox_outside_weights
     )
-
-
     '''
-    expand_sampled_labels = np.expand_dims(sampled_labels,axis=2)
-    expand_sampled_labels = np.repeat(expand_sampled_labels,81,axis=1)
 
-    for idx in range(0,len(sampled_labels)):
-        label_int = sampled_labels[idx]
-        if label_int != 0:
-            multi_label_str = label_code['idx_to_label'][str(label_int)]
-            multi_label = map(int, list(multi_label_str))
-            expand_sampled_labels[idx] = multi_label
-        else:
-            expand_sampled_labels[idx] = [0]*81
-
-    # Base Fast R-CNN blobs
-    blob_dict = dict(
-        # labels_int32=sampled_labels.astype(np.int32, copy=False),
-        labels_int32=expand_sampled_labels.astype(np.int32, copy=False),
-        rois=sampled_rois,
-        bbox_targets=bbox_targets,
-        bbox_inside_weights=bbox_inside_weights,
-        bbox_outside_weights=bbox_outside_weights
-    )
-    '''
     # Base Fast R-CNN blobs
     '''
     blob_dict = dict(

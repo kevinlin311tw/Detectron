@@ -33,6 +33,8 @@ import os
 import sys
 import time
 import numpy as np
+import code
+from tqdm import tqdm
 
 from caffe2.python import workspace
 
@@ -94,8 +96,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def main(args):
 
+def main(args):
+    new_boxes = []
     logger = logging.getLogger(__name__)
     merge_cfg_from_file(args.cfg)
     cfg.NUM_GPUS = 1
@@ -106,50 +109,49 @@ def main(args):
     dummy_ava_action_label = dummy_datasets.get_ava_dataset_action()
 
     OUTPUT_TEST_CSV = args.output_dir+'/ours_results.csv'
-    new_boxes = []
+    fmt = "%s, %s, %f, %f, %f, %f, %d, %f"
+    
 
     if os.path.isdir(args.im_or_folder):
-        im_list = glob.iglob(args.im_or_folder + '/*.' + args.image_ext)
+        im_list = glob.iglob(args.im_or_folder + '/*/*.' + args.image_ext)
+        tt = glob.iglob(args.im_or_folder + '/*/*.' + args.image_ext)
     else:
         im_list = [args.im_or_folder]
-
+        tt = [args.im_or_folder]
+    data_length = len(list(tt))
     for i, im_name in enumerate(im_list):
-        out_name = os.path.join(
-            args.output_dir, '{}'.format(os.path.basename(im_name) + '.pdf')
-        )
-        logger.info('Processing {} -> {}'.format(im_name, out_name))
+        print('progress = %f, %d'%(i/data_length,i))
+        # out_name = os.path.join(
+        #     args.output_dir, '{}'.format(os.path.basename(im_name) + '.pdf')
+        # )
+        out_name = args.output_dir+'/'+im_name.split('/')[-2]+'_'+im_name.split('/')[-1]+'.pdf'
+        # logger.info('Processing {} -> {}'.format(im_name, out_name))
+
         im = cv2.imread(im_name)
+        print(im_name)
         timers = defaultdict(Timer)
         t = time.time()
         with c2_utils.NamedCudaScope(0):
             cls_boxes, cls_segms, cls_keyps = infer_engine.im_detect_all(
                 model, im, None, timers=timers
             )
-        logger.info('Inference time: {:.3f}s'.format(time.time() - t))
-        for k, v in timers.items():
-            logger.info(' | {}: {:.3f}s'.format(k, v.average_time))
-        if i == 0:
-            logger.info(
-                ' \ Note: inference on the first image will be slower than the '
-                'rest (caches and auto-tuning need to warm up)'
+        if i%1000==0:
+            vis_utils.my_action_vis_one_image_single(
+                im[:, :, ::-1],  # BGR -> RGB for visualization
+                im_name,
+                args.output_dir,
+                cls_boxes,
+                cls_segms,
+                cls_keyps,
+                dataset=dummy_coco_dataset,
+                action_label=dummy_ava_action_label,
+                box_alpha=0.3,
+                show_class=True,
+                thresh=0.5,
+                kp_thresh=2
             )
 
-        vis_utils.my_action_vis_one_image(
-            im[:, :, ::-1],  # BGR -> RGB for visualization
-            im_name,
-            args.output_dir,
-            cls_boxes,
-            cls_segms,
-            cls_keyps,
-            dataset=dummy_coco_dataset,
-            action_label=dummy_ava_action_label,
-            box_alpha=0.3,
-            show_class=True,
-            thresh=0.0,
-            kp_thresh=2
-        )
-        '''
-        new_boxes = vis_utils.my_action_vis_one_image_csv(
+        new_boxes = vis_utils.my_action_vis_one_image_csv_single(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             args.output_dir,
@@ -164,9 +166,11 @@ def main(args):
             thresh=0.5,
             kp_thresh=2
         )
-        '''
-    # np.savetxt(OUTPUT_TEST_CSV, new_boxes, fmt=fmt)
-    # code.interact(local=locals())
+
+        if new_boxes!=None:
+            if i%1000==0:
+                np.savetxt(OUTPUT_TEST_CSV, new_boxes, fmt=str(fmt))
+
 if __name__ == '__main__':
     workspace.GlobalInit(['caffe2', '--caffe2_log_level=0'])
     setup_logging(__name__)
